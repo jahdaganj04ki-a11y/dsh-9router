@@ -1,0 +1,79 @@
+{
+  "name": "dsh-9router",
+  "version": "0.1.0",
+  "description": "DSH plugin: OpenCode's free models as a first-class DeepSeek Harness provider route — free-tier client fingerprint, TLS cipher impersonation, live catalog with per-model context, output cap, vision and reasoning levels.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./types/index.d.ts",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "types",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "docs",
+    "LICENSE"
+  ],
+  "dsh": {
+    "id": "opencode-free",
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "changelog": {
+      "0.1.0": "Initial release: OpenCode free-tier lane on /inference/v1 with the v2 client fingerprint, native TLS cipher impersonation, per-model endpoint routing, live catalog discovery and full model metadata (context, max output, vision, reasoning efforts)."
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "probe": "node scripts/probe.mjs",
+    "probe:ablate": "node scripts/probe.mjs --ablate"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh-desktop",
+    "opencode",
+    "opencode-zen",
+    "free-models",
+    "llm-provider"
+  ],
+  "categories": [
+    "ai",
+    "productivity"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2 || ^4.0.5 || ^4.1.0",
+    "@deepseek-ai/dsh-llm": "^0.2.0-rc.1 || ^0.2.1-rc.1 || ^0.2.1-rc.2 || ^0.2.1-rc.3 || ^0.2.1-rc.4 || ^0.2.1 || ^0.2.2",
+    "@deepseek-ai/dsh-credentials": "^0.2.0-rc.1 || ^0.2.1-rc.1 || ^0.2.1-rc.2 || ^0.2.1-rc.3 || ^0.2.1-rc.4 || ^0.2.1 || ^0.2.2",
+    "@deepseek-ai/dsh-settings": "^0.2.0-rc.1 || ^0.2.1-rc.1 || ^0.2.1-rc.2 || ^0.2.1-rc.3 || ^0.2.1-rc.4 || ^0.2.1 || ^0.2.2",
+    "@deepseek-ai/dsh-launch-environment": "^0.2.0-rc.1 || ^0.2.1-rc.1 || ^0.2.1-rc.2 || ^0.2.1-rc.3 || ^0.2.1-rc.4 || ^0.2.1 || ^0.2.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-credentials": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-launch-environment": {
+      "optional": true
+    }
+  }
+}

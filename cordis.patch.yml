@@ -1,0 +1,60 @@
+# The config layer this package contributes: it inserts the provider plugin into the
+# Loader tree. Applied automatically when a profile lists this package as a bundle
+# (see `dsh.profile.bundles`).
+#
+# Without this layer `dsh plugin add` installs the package as a plain dependency and
+# the plugin is never loaded — dsh warns "declares no dsh.bundle … not a profile layer".
+#
+# The entry `id` is also the settings namespace this plugin registers its
+# configurable-provider directory under, so keep it stable: renaming it orphans
+# anything a user stored under the old namespace.
+- insert:
+    - id: opencode-free
+      name: dsh-9router
+      # Everything below is optional — the defaults already give a working
+      # anonymous free lane. Uncomment only what you need to change.
+      #
+      # config:
+      #   # Provider route name the model picker groups models under.
+      #   provider: opencode-free
+      #   # Endpoint root. Free lane lives on /inference/v1 since OpenCode v2;
+      #   # /zen/v1 answers every free request with 403 FreeTierError.
+      #   baseURL: https://opencode.ai
+      #   # Credential reference (an env var name), resolved per request.
+      #   # Absent/empty = anonymous `Bearer public` on the shared free quota.
+      #   apiKeyEnv: OPENCODE_API_KEY
+      #   # Output cap materialized when a caller and the model both omit one.
+      #   maxTokens: 32768
+      #   # Context window assumed for a model no catalog describes.
+      #   defaultContextWindow: 262144
+      #   # Live catalog: which models are free, and how large they are.
+      #   catalog:
+      #     enabled: true
+      #     modelsUrl: https://opencode.ai/inference/v1/models
+      #     devUrl: https://models.dev/api.json
+      #     ttlMs: 3600000
+      #     timeoutMs: 8000
+      #     cachePath: ''          # '' = <dsh home>/cache/opencode-free-catalog.json
+      #   # The v2 free-tier client fingerprint. `enabled: false` turns the plugin
+      #   # into a plain OpenAI-compatible client — useful with a paid key, and it
+      #   # will 403 on the free lane.
+      #   fingerprint:
+      #     enabled: true
+      #     userAgent: opencode/latest/2.0.26/cli
+      #     client: cli
+      #     project: global
+      #     # Inject OpenCode's verbatim `read`/`shell` tool definitions.
+      #     tools: true
+      #     # Append the CLI's `<env>` block to the system prompt.
+      #     envMarker: true
+      #   # Transport. 'auto' tries the impersonated cipher list first.
+      #   transport:
+      #     mode: auto            # auto | native | impersonate | wreq
+      #     # BoringSSL/Chrome-family cipher list the free gate accepts (JA4 cipher
+      #     # hash 5b57614c22b0). Node's tls honours it verbatim, no GREASE added.
+      #     cipherList: ''        # '' = the built-in verified list
+      #     timeoutMs: 120000
+      #   # Images. The free lane has returned 503 for image input at times;
+      #   # 'auto' declares vision only for models the catalog says accept it and
+      #   # sends OpenCode's own opt-in header.
+      #   vision: auto            # auto | on | off

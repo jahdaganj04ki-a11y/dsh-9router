@@ -306,14 +306,24 @@ node scripts/probe.mjs --ablate   # remove one gate at a time; each should be re
 node scripts/probe.mjs --json     # machine-readable, for diffing over time
 ```
 
-Read the result this way:
+Two outcomes matter: the complete request on the configured transport (`impersonate` by default), and the
+same request on stock Node ciphers (`native OpenSSL ciphers`, only printed with `--ablate`). Read the pair
+this way:
 
-- **Complete request 200, every ablation refused** → nothing changed; the plugin is correct.
-- **Complete request 403** → an identity gate moved. The ablation that unexpectedly returns 200 names
-  the one that is no longer enforced; the ones still refused are fine. Compare
-  `fingerprint.userAgent` and `FINGERPRINT_TOOL_DEFINITIONS` against a fresh capture of the current
-  client, and override them in config rather than waiting for a release.
-- **Complete request 429 while the body ablations behave** → the TLS gate. Confirm by re-running with
-  `--transport native`: if that also 429s and `impersonate` 200s, the cipher list is the variable.
-- **Complete request 429 and `--transport native` 200** → the shared anonymous quota is genuinely
-  exhausted. Set `OPENCODE_API_KEY`.
+| complete | native | ablations | verdict |
+|---|---|---|---|
+| 200 | refused | all refused | **normal** — the plugin is correct and the TLS gate is enforced |
+| 200 | 200 | all refused | the TLS gate is not enforced *from this network* (a proxy terminating TLS is the usual reason). The plugin still works; do not read this as "gate 6 is gone" |
+| 403 | – | – | an **identity** gate moved (path, User-Agent, session headers, session-id shape) |
+| 429 | 200 | – | the **cipher list** is the variable: upstream now refuses the list this plugin sends but accepts stock Node's. Re-measure `transport.cipherList` |
+| 429 | 429 | one body ablation returns 200 | the **expected body** moved — that ablation names the new shape. Adjust `fingerprint.definitions` / `tools` / `envMarker` |
+| 429 | 429 | all refused, listing still answers | the shared anonymous **quota** is exhausted. Retry later or set `OPENCODE_API_KEY` |
+
+For a 403, the ablation that unexpectedly returns 200 names the gate that is no longer enforced; the ones
+still refused are fine. Compare `fingerprint.userAgent` and `FINGERPRINT_TOOL_DEFINITIONS` against a fresh
+capture of the current client, and override them in config rather than waiting for a release.
+
+The quota row is a diagnosis of exclusion, and it is worth saying why: this lane answers an exhausted quota
+and a refused body with the same 429, so no single response separates them. What separates them is that a
+quota refusal does not depend on the request — every ablation is refused too, the `/models` listing (which
+is not quota-gated) still answers, and the same request from another network or with a key succeeds.

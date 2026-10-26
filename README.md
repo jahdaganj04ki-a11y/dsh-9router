@@ -16,6 +16,10 @@ Context-Window, Output-Limit und Vision.
 > Dieses Plugin baut die erwartete Client-Identität nach. Alle sechs Gates sind in
 > [`docs/gate.md`](docs/gate.md) einzeln belegt.
 
+**Übergabe:** [`docs/handoff.md`](docs/handoff.md) führt Schritt für Schritt durch Inbetriebnahme,
+Verifikation, Diagnose und Weiterpflege unter Windows — einschließlich der Pfade, Umgebungsvariablen und
+Menüpunkte, die DSH Desktop v0.12.1 vorgibt.
+
 ---
 
 ## Inhalt
@@ -29,6 +33,7 @@ Context-Window, Output-Limit und Vision.
 - [Warum kein `attributionHeaders()`](#warum-kein-attributionheaders)
 - [Tests](#tests)
 - [Grenzen](#grenzen)
+- [Handoff: Inbetriebnahme, Diagnose, Wartung](docs/handoff.md)
 
 ---
 
@@ -52,18 +57,53 @@ deklariert sie als Peer-Abhängigkeit.
 
 ### Weg B — Über die Kommandozeile
 
-DSH Desktop legt sein Profil unter `%APPDATA%\dsh-desktop\harness\profiles\web` an. Von dort:
+DSH Desktop legt sein Profil unter `%APPDATA%\dsh-desktop\harness\profiles\web` an. Drei Dinge sind dort
+zu beachten, sonst arbeitet das Kommando an einem anderen Baum oder findet sein Werkzeug nicht:
+
+1. **`DSH_HOME` setzen.** Ohne die Variable fällt das CLI auf `~\.dsh` zurück — ein anderer Baum als der des
+   Desktops. Der Desktop setzt die Variable für seine eigenen Prozesse; eine selbst geöffnete
+   Eingabeaufforderung erbt sie nicht.
+2. **pnpm muss auf dem PATH sein.** Fehlt es, endet der Lauf mit Exit-Code 127 und
+   `dsh: pnpm was not found`. Der Desktop schreibt dafür Shims nach
+   `%APPDATA%\dsh-desktop\harness\.desktop-bin` (`node.cmd`, `pnpm.cmd`), sobald er selbst einmal eine
+   Paketaktion ausgeführt hat.
+3. **Die CLI-Version muss zur Laufzeit passen**, denn die Kompatibilitätsprüfung liest die Version des
+   CLI-eigenen `dsh-app-boot`. DSH Desktop v0.12.1 pinnt `0.2.1-rc.2`.
+
+Variante B1 — eigenes Node ≥ 20 und pnpm vorhanden. `@deepseek-ai/dsh` zieht dabei den gesamten
+Harness-Baum als globale Abhängigkeit nach; wer das nicht will, nimmt Weg A oder Variante B2:
 
 ```bat
-cd /d "%APPDATA%\dsh-desktop\harness\profiles\web"
+npm i -g @deepseek-ai/dsh@0.2.1-rc.2 pnpm
+
+set "DSH_HOME=%APPDATA%\dsh-desktop\harness"
+set "PATH=%DSH_HOME%\.desktop-bin;%PATH%"
+cd /d "%DSH_HOME%\profiles\web"
 dsh plugin --profile web add -w github:<ihr-fork>/dsh-9router
 ```
+
+Variante B2 — ohne eigenes Node und ohne pnpm-Installation, mit den Bordmitteln des Desktops. Das ist
+dasselbe, was die App intern tut: das Electron-Programm als Node, mit dem CLI aus dem `app.asar`.
+
+```bat
+set "DSH_HOME=%APPDATA%\dsh-desktop\harness"
+set "ELECTRON_RUN_AS_NODE=1"
+set "PATH=%DSH_HOME%\.desktop-bin;%PATH%"
+cd /d "%DSH_HOME%\profiles\web"
+
+"%LOCALAPPDATA%\Programs\DSH Desktop\DSH Desktop.exe" ^
+  "%LOCALAPPDATA%\Programs\DSH Desktop\resources\app.asar\node_modules\@deepseek-ai\dsh\lib\bin.js" ^
+  plugin --profile web add -w github:<ihr-fork>/dsh-9router
+```
+
+Der Installationsordner ist im Installer wählbar; ein Rechtsklick auf den Startmenü-Eintrag →
+**Dateipfad öffnen** nennt den tatsächlichen.
 
 Das `-w` ist **keine** Option, sondern Pflicht: Das Profilverzeichnis enthält eine
 `pnpm-workspace.yaml`, pnpm behandelt es also als Workspace-Root. Ohne das Flag folgt
 `ERR_PNPM_ADDING_TO_ROOT`.
 
-Kontrolle, ob das Plugin wirklich im Loader-Baum hängt:
+Kontrolle, ob das Plugin wirklich im Loader-Baum hängt (mit denselben Variablen wie oben):
 
 ```bat
 dsh --profile web --dump-config | findstr opencode-free
@@ -75,6 +115,11 @@ Erwartet:
 - id: opencode-free
   name: dsh-9router
 ```
+
+> [!NOTE]
+> Die Menüleiste der App ist unter Windows ausgeblendet, bis **Alt** gedrückt wird. Dort findet sich das Menü
+> **Harness** mit **Restart** (Strg+Umschalt+R) und **Show Harness Log** — beides für Weg A nützlich, der
+> keine Kommandozeile braucht.
 
 ### Kein Build-Schritt, keine native Abhängigkeit
 
@@ -239,11 +284,36 @@ node scripts\probe.mjs --model cat-jam-free
 node scripts\probe.mjs --json
 ```
 
+`node` ist dabei entweder eine eigene Installation oder — der Desktop bringt kein eigenes Node mit — der
+Shim, den die App selbst schreibt:
+
+```bat
+"%APPDATA%\dsh-desktop\harness\.desktop-bin\node.cmd" scripts\probe.mjs
+```
+
+Das Skript importiert ausschließlich Node-Bordmittel und braucht deshalb kein `node_modules`; es läuft aus
+der installierten Kopie heraus, ohne dass dafür etwas nachinstalliert werden muss.
+
 Der Normaldurchlauf holt die Modell-Liste und stellt **eine** vollständige Anfrage. `--ablate`
 entfernt danach gezielt je ein Gate und erwartet eine Ablehnung — ein Gate, das dort mit 200
-antwortet, wird upstream aktuell nicht durchgesetzt. Anschließend wird dieselbe Anfrage mit Nodes
-Standard-Ciphern wiederholt: Bekommt die ablatierte Fassung 200 und die vollständige 429, ist es das
-TLS-Gate.
+antwortet, wird upstream aktuell nicht durchgesetzt. Anschließend wiederholt das Skript dieselbe
+Anfrage mit Nodes Standard-Ciphern. Entscheidend ist das **Paar** aus vollständiger Anfrage und
+Standard-Cipher-Fassung:
+
+| vollständig | Standard-Cipher | Ablationen | Bedeutung |
+|---|---|---|---|
+| 200 | abgelehnt | alle abgelehnt | **Normalfall** — alles korrekt, TLS-Gate greift |
+| 200 | 200 | alle abgelehnt | TLS-Gate wird aus diesem Netz nicht durchgesetzt (oft ein TLS-terminierender Proxy) |
+| 403 | – | – | ein **Identitäts-Gate** hat sich geändert |
+| 429 | 200 | – | die **Cipher-Liste** ist die Variable: `transport.cipherList` neu vermessen |
+| 429 | 429 | eine Rumpf-Ablation liefert 200 | der **erwartete Rumpf** hat sich geändert — diese Ablation nennt ihn |
+| 429 | 429 | alle abgelehnt, Listing antwortet | **Kontingent erschöpft** — später erneut oder `OPENCODE_API_KEY` |
+
+Die letzte Zeile ist eine Ausschlussdiagnose, und das hat einen Grund: Die Lane beantwortet erschöpftes
+Kontingent und einen abgelehnten Rumpf mit demselben 429. Trennen lässt sich beides nur darüber, dass eine
+Kontingent-Ablehnung nicht von der Anfrage abhängt — jede Ablation wird ebenfalls abgelehnt, das nicht
+kontingentierte `/models`-Listing antwortet weiter, und dieselbe Anfrage aus einem anderen Netz oder mit
+eigenem Key läuft.
 
 > [!NOTE]
 > Das Skript spricht die echte Free-Lane an. Jede erfolgreiche Anfrage verbraucht gemeinsames anonymes

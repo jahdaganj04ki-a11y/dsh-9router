@@ -17,6 +17,10 @@ run a full agent loop — tool calls, reasoning, context window, output cap and 
 > identity. All six gates are documented individually, with their evidence, in
 > [`docs/gate.md`](docs/gate.md).
 
+**Handoff:** [`docs/handoff.md`](docs/handoff.md) (German) walks through installation, verification,
+diagnosis and maintenance on Windows step by step — including the paths, environment variables and menu
+items DSH Desktop v0.12.1 dictates.
+
 ---
 
 ## Install on Windows
@@ -37,21 +41,57 @@ is built against exactly that `LlmAdapter` contract and declares it as a peer de
 
 ### B — From the command line
 
-DSH Desktop keeps its profile at `%APPDATA%\dsh-desktop\harness\profiles\web`:
+DSH Desktop keeps its profile at `%APPDATA%\dsh-desktop\harness\profiles\web`. Three things matter there,
+or the command operates on a different tree or cannot find its tooling:
+
+1. **Set `DSH_HOME`.** Without it the CLI falls back to `~\.dsh` — a different tree from the Desktop's. The
+   Desktop sets the variable for its own processes; a shell you open yourself does not inherit it.
+2. **pnpm must be on PATH.** Missing it ends the run with exit code 127 and `dsh: pnpm was not found`. The
+   Desktop writes shims (`node.cmd`, `pnpm.cmd`) into `%APPDATA%\dsh-desktop\harness\.desktop-bin` as soon as
+   it has run one package operation itself.
+3. **The CLI version must match the runtime**, because the compatibility check reads the version of the CLI's
+   own `dsh-app-boot`. DSH Desktop v0.12.1 pins `0.2.1-rc.2`.
+
+Variant B1 — your own Node ≥ 20 and pnpm:
 
 ```bat
-cd /d "%APPDATA%\dsh-desktop\harness\profiles\web"
+npm i -g @deepseek-ai/dsh@0.2.1-rc.2 pnpm
+
+set "DSH_HOME=%APPDATA%\dsh-desktop\harness"
+set "PATH=%DSH_HOME%\.desktop-bin;%PATH%"
+cd /d "%DSH_HOME%\profiles\web"
 dsh plugin --profile web add -w github:<your-fork>/dsh-9router
 ```
+
+Variant B2 — no Node and no pnpm of your own, using what the Desktop ships. This is exactly what the app does
+internally: the Electron executable as Node, running the CLI from `app.asar`.
+
+```bat
+set "DSH_HOME=%APPDATA%\dsh-desktop\harness"
+set "ELECTRON_RUN_AS_NODE=1"
+set "PATH=%DSH_HOME%\.desktop-bin;%PATH%"
+cd /d "%DSH_HOME%\profiles\web"
+
+"%LOCALAPPDATA%\Programs\DSH Desktop\DSH Desktop.exe" ^
+  "%LOCALAPPDATA%\Programs\DSH Desktop\resources\app.asar\node_modules\@deepseek-ai\dsh\lib\bin.js" ^
+  plugin --profile web add -w github:<your-fork>/dsh-9router
+```
+
+The installer lets you choose the directory; right-click the Start menu entry → **Open file location** for
+the real one.
 
 `-w` is **not** optional. The profile directory ships a `pnpm-workspace.yaml`, so pnpm treats it as a
 workspace root; without the flag you get `ERR_PNPM_ADDING_TO_ROOT`.
 
-Confirm it really entered the Loader tree:
+Confirm it really entered the Loader tree (with the same variables as above):
 
 ```bat
 dsh --profile web --dump-config | findstr opencode-free
 ```
+
+> [!NOTE]
+> On Windows the app's menu bar stays hidden until you press **Alt**. It holds the **Harness** menu with
+> **Restart** (Ctrl+Shift+R) and **Show Harness Log** — both useful for path A, which needs no shell at all.
 
 ### No build step, no required native dependency
 
@@ -210,10 +250,34 @@ node scripts\probe.mjs --model cat-jam-free
 node scripts\probe.mjs --json
 ```
 
+`node` there is either an installation of your own or — the Desktop ships no standalone Node — the shim the
+app writes itself:
+
+```bat
+"%APPDATA%\dsh-desktop\harness\.desktop-bin\node.cmd" scripts\probe.mjs
+```
+
+The script imports nothing but Node builtins, so it needs no `node_modules`: it runs from the installed copy
+with nothing extra to install.
+
 The default run fetches the model listing and makes **one** complete request. `--ablate` then removes
 one gate at a time and expects a refusal — a gate that answers 200 there is not currently enforced
-upstream. Finally the same request is repeated on Node's stock ciphers: if the ablated variant gets
-200 and the complete one 429, it is the TLS gate.
+upstream. Finally the script repeats the same request on Node's stock ciphers. What matters is the
+**pair** of the complete request and that stock-cipher run:
+
+| complete | stock ciphers | ablations | verdict |
+|---|---|---|---|
+| 200 | refused | all refused | **normal** — everything correct, the TLS gate is enforced |
+| 200 | 200 | all refused | the TLS gate is not enforced from this network (often a TLS-terminating proxy) |
+| 403 | – | – | an **identity** gate moved |
+| 429 | 200 | – | the **cipher list** is the variable: re-measure `transport.cipherList` |
+| 429 | 429 | one body ablation returns 200 | the **expected body** moved — that ablation names it |
+| 429 | 429 | all refused, listing answers | the shared **quota** is exhausted — retry later or set `OPENCODE_API_KEY` |
+
+The last row is a diagnosis of exclusion, for a reason: this lane answers an exhausted quota and a refused
+body with the same 429. Only the fact that a quota refusal does not depend on the request separates them —
+every ablation is refused as well, the non-quota-gated `/models` listing still answers, and the same request
+from another network or with a key succeeds.
 
 > [!NOTE]
 > The script talks to the real free lane. Each successful request draws on the shared anonymous quota,

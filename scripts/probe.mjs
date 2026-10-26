@@ -265,9 +265,12 @@ function explain(outcome) {
   if (outcome.type === 'FreeUsageLimitError' || outcome.status === 429) {
     console.log('\n  → FreeUsageLimitError: either the shared anonymous quota is exhausted, or the')
     console.log('    body/TLS gate refused the request — this lane answers both with 429.')
-    console.log('    Re-run with --ablate: if the body ablations all fail as expected but the')
-    console.log('    "native OpenSSL ciphers" case succeeds, it is the TLS gate; if the complete')
-    console.log('    request above also fails on --transport impersonate, it is the quota.')
+    console.log('    Re-run with --ablate and compare three things:')
+    console.log('      · a body ablation returns 200        -> the expected body moved; adjust fingerprint.*')
+    console.log('      · "native OpenSSL ciphers" returns 200 -> the cipher list is the variable; re-measure')
+    console.log('                                              transport.cipherList')
+    console.log('      · every ablation refused and the listing above answered -> the shared quota is')
+    console.log('        exhausted; retry later or set OPENCODE_API_KEY')
   }
   if (outcome.status === 0) {
     console.log('\n  → No HTTP status at all: the request never completed. Check outbound HTTPS')
